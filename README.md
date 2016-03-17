@@ -1,4 +1,5 @@
 # Layer Webhooks Nexmo Service
+[![npm version](http://img.shields.io/npm/v/layer-webhooks-services-nexmo.svg)](https://npmjs.org/package/layer-webhooks-services-nexmo)
 
 This repository contains a service that SMS-notifies users of your Layer Applications
 of unread messages.  This repository requires some configuration to work.  Users can reply to these SMS messages and have the messages appear in the Conversation.  Different nexmo phone numbers are used to send unread notifications so that a given thread in an SMS UI represents a single Conversation.
