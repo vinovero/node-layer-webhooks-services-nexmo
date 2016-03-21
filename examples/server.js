@@ -77,17 +77,13 @@ function introduceConversation(message, callback) {
   });
 }
 
-
-var getUser = require('./my-custom-get-user');
-
 /* Initialize the layer-nexmo webhooks server */
 // Startup the server; allow for a custom heroku PORT
 secureServer.listen(process.env.PORT || PORT, function() {
   console.log('Secure Express server listening on port ' + PORT);
   require('../index')({
-    getUser: getUser,
     introduceConversation: introduceConversation,
-    delay: '5 seconds',
+    delay: '30 minutes',
     layer: {
       webhookServices: webhookServices,
       client: layerClient,

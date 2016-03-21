@@ -25,95 +25,87 @@ module.exports = function(options) {
   if (!options.server.layerPath) options.server.layerPath = DEFAULT_PATH;
 
   // Define the receipts webhook structure
-  var hook = createHookObj();
-  var logger = debug('layer-webhooks-nexmo:' + hook.name.replace(/\s/g,'-') + ':sms-notifier');
-
-  // Register the webhook with Layer's Services
-  options.layer.webhookServices.register({
-    secret: options.layer.secret,
-    url: options.server.url,
-    hooks: [hook]
-  });
-
-  // Listen for events from Layer's Services
-  options.layer.webhookServices.receipts({
-    expressApp: options.server.app,
-    secret: options.layer.secret,
-    hooks: [hook]
-  });
+  var hook = registerHooks();
 
   // Any Messages that are unread by any participants will be passed into this job
   // after the delay specified in hook has passed.
   queue.process(hook.name, 10, function(job, done) {
-    var message = job.data.message;
-    var recipients = job.data.recipients;
-    logger('Start processing Message ' + message.id + ' for users ' + recipients);
-    options.getUser(message.sender.user_id, function(err, sender) {
-      var senderId = message.sender.user_id;
-      message.sender = sender;
-      message.sender.user_id = senderId;
-      processMessage(message, recipients, done);
-    });
+    processMessage(
+      job.data.message,
+      job.data.recipients,
+      job.data.identities,
+      done
+    );
   });
+
+  function simplifyIdentity(identity) {
+    if (typeof options.identities !== 'function') {
+      return {
+      	displayName: identity.display_name,
+      	avatarUrl: identity.avatar_url,
+      	firstName: identity.first_name,
+      	lastName: identity.last_name,
+      	email: identity.email_address,
+      	phone: identity.phone_number,
+      	metadata: identity.metadata
+      };
+    } else {
+      return identity;
+    }
+  }
 
   /**
    * Any Message with unread participants will call processMessage to handle it.
    * This will iterate over all unread recipients, gather the necessary info and call prepareEmail.
    */
-  function processMessage(message, recipients, done) {
-    // NOTE: By definition, recipients will never be an empty array.
+  function processMessage(message, recipients, identities, done) {
+    message.sender = simplifyIdentity(identities[message.sender.user_id] || {});
     var count = 0;
     recipients.forEach(function(recipient) {
-      options.getUser(recipient, function(err, user) {
-        count++;
-        try {
+      var user = simplifyIdentity(identities[recipient] || {});
+      if (user.phone) {
+        // Cache this so we can handle replies
+	      redis.set(REDIS_PHONE_PREFIX + user.phone, recipient);
+
+        // Continue to work on sending the SMS
+        getPhoneNumberToSendFrom(recipient, message.conversation.id, function(err, fromNumber, isFirst) {
           if (err) return handleError(err, done);
-
-          if (user.phone) {
-            // Cache this so we can handle replies
-	          redis.set(REDIS_PHONE_PREFIX + user.phone, recipient);
-
-            // Continue to work on sending the SMS
-            prepareSMS(message, message.sender, user, recipient, done);
-	        }
-        } catch (err) {
-          return handleError(err, done);
-        }
-
-        // Finished when all recipients are processed
-        if (count === recipients.length) {
-          done();
-        }
-      });
+          prepareSMS(message, message.sender, user, recipient, fromNumber, isFirst, done);
+      }
     });
+    done();
   }
 
   /**
    * Calculate all the fields needed for the template and find a phone number, then send the SMS.
    */
-  function prepareSMS(message, sender, user, userId, done) {
+  function prepareSMS(message, sender, user, userId, fromNumber, isFirst, done) {
+
+    // If we don't have a number to send from, give up.
+    if (!fromNumber) {
+    	logger('Out of available phone numbers; skipping unread message notification for user ' + userId,
+      ' on Conversation ' + message.conversation.id);
+      return done();
+    }
+
+    // Populate the message object for easy templating
     message.recipient = user;
     message.text = getText(message);
+
+    // Ignore empty messages
     if (message.text.match(/^\s*$/)) return done();
 
-    getSenderPhoneNumber(userId, message.conversation.id, function(err, fromNumber, isFirst) {
-      if (err) return done(err);
-      if (!fromNumber) {
-      	logger('Out of available phone numbers; skipping unread message notification for user ' + userId,
-        ' on Conversation ' + message.conversation.id);
-	      return done();
-      }
-      if (isFirst && options.introduceConversation) {
-  	    options.introduceConversation(message, function(err, introText) {
-    	    if (err) return done(err);
-          logMessage(fromNumber, user.phone, message.id, true);
-          sendSMS(message, introText, fromNumber, user.phone, done);
-      	});
-      } else {
-        logMessage(fromNumber, user.phone, message.id, false);
-        sendSMS(message, '', fromNumber, user.phone, done);
-      }
-    });
+    // If this is a new link between Conversation and fromNumber, introduce the Conversation.
+    if (isFirst && options.introduceConversation) {
+	    options.introduceConversation(message, function(err, introText) {
+  	    if (err) return done(err);
+        logMessage(fromNumber, user.phone, message.id, true);
+        sendSMS(message, introText, fromNumber, user.phone, done);
+    	});
+    } else {
+      logMessage(fromNumber, user.phone, message.id, false);
+      sendSMS(message, '', fromNumber, user.phone, done);
+    }
   }
 
   /**
@@ -140,7 +132,7 @@ module.exports = function(options) {
    * Lookup the phone number to reuse, reallocate or to assign
    * to this user for this Conversation.
    */
-  function getSenderPhoneNumber(userId, conversationId, callback) {
+  function getPhoneNumberToSendFrom(userId, conversationId, callback) {
     redis.get(REDIS_USER_PREFIX + userId, function(err, userConversationsStr) {
       var fromNumber, changes, first;
       var expires = Date.now() + EXPIRATION_TIME;
@@ -163,7 +155,7 @@ module.exports = function(options) {
         // If there is no link, see if there is an available number, and if so, assign it
         // to this Conversation for this user.
         else {
-          fromNumber = findAvailableNumber(userConversations);
+          fromNumber = findAvailableNumberToSendFrom(userConversations);
           if (fromNumber) {
             userConversations[conversationId] = {
               phone: fromNumber,
@@ -176,6 +168,7 @@ module.exports = function(options) {
         return handleError(err, callback);
       }
 
+      // Write the new user config back to storage
       if (changes) redis.set(REDIS_USER_PREFIX + userId, JSON.stringify(userConversations));
 
       // Provide the fromNumber and an indication if its a newly established link to the caller
@@ -203,7 +196,7 @@ module.exports = function(options) {
    * Return a nexmo number that isn't currently in use by this user.
    * Return undefined if no numbers are available.
    */
-  function findAvailableNumber(userConversations) {
+  function findAvailableNumberToSendFrom(userConversations) {
     var usedNumbers = Object.keys(userConversations).map(function(cId) {
       return userConversations[cId].phone;
     });
@@ -215,8 +208,8 @@ module.exports = function(options) {
   /**
    * Create the webhook definition object
    */
-  function createHookObj() {
-    return {
+  function registerHooks() {
+    var hook = {
       name: options.name,
       path: options.server.layerPath,
 
@@ -230,9 +223,28 @@ module.exports = function(options) {
         // Any user whose recipient status is 'sent' or 'delivered' (not 'read')
         // is of interest once the delay has completed.
         // Change to 'sent' to ONLY send notifications when a message wasn't delivered.
-        recipient_status_filter: options.recipient_status_filter || ['sent', 'delivered']
+        reportForStatus: options.recipient_status_filter || ['sent', 'delivered'],
+	      identities: 'identities' in options ? options.identities : true
       }
     };
+
+    var logger = debug('layer-webhooks-nexmo:' + hook.name.replace(/\s/g,'-') + ':sms-notifier');
+
+    // Register the webhook with Layer's Services
+    options.layer.webhookServices.register({
+      secret: options.layer.secret,
+      url: options.server.url,
+      hooks: [hook]
+    });
+
+    // Listen for events from Layer's Services
+    options.layer.webhookServices.receipts({
+      expressApp: options.server.app,
+      secret: options.layer.secret,
+      hooks: [hook]
+    });
+
+    return hook;
   }
 
   /**
