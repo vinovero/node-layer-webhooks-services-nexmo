@@ -71,6 +71,7 @@ module.exports = function(options) {
         getPhoneNumberToSendFrom(recipient, message.conversation.id, function(err, fromNumber, isFirst) {
           if (err) return handleError(err, done);
           prepareSMS(message, message.sender, user, recipient, fromNumber, isFirst, done);
+        });
       }
     });
     done();

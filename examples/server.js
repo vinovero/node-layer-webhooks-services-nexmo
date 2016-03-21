@@ -21,7 +21,7 @@ var redis = require('redis').createClient(process.env.REDIS_URL);
 var queue = require('kue').createQueue({
   prefix: 'layer-nexmo-integration-',
   jobEvents: false,
-  redis: process.env.REDIS_URL
+  redis: process.env.REDIS_URL || undefined
 });
 
 // Setup the Layer Webhooks Service
