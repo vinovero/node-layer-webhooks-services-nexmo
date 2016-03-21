@@ -63,12 +63,12 @@ Receiving SMS Messages
 
 ## Setting up Identity Services
 
-Layer's Webhooks do not provide the recipient's phone numbers, only their userId.  In order to send them a text message, we will need to get their phone number.  The default behavior is to automatically get the phone number from the Layer's Identities service; however, this only works if you've actually registered your user's phone numbers there.
+Layer's Webhooks do not provide the recipient's phone number, only their userId.  In order to send them an SMS, we will need to get their phone number.  The default behavior is to automatically get the number from the Layer's Identities service; however, this only works if you've actually registered your user's phone number there.
 
-If you are not using the Layer Identities service and putting cellphone numbers there, then provide a `getUser` function when configuring this module. The `getUser` function should return a User Object.  Your User Object should provide `name` and `phone` fields; other custom fields can be added and used from your templates.
+If you are not using the Layer Identities service and putting phone numbers there, then provide a `identities` function when configuring this module. The `identities` function should return a User Object.  Your User Object should provide `name` and `phone` fields; other custom fields can be added and used from your templates.
 
 ```javascript
-function getUser(userId, callback) {
+function myGetIdentity(userId, callback) {
     // Lookup in a database or query a web service to get details of this user
     doLookup(userId, function(err, result) {
        callback(error, {
@@ -78,6 +78,12 @@ function getUser(userId, callback) {
        });
     });
 }
+
+require('layer-webhooks-service-nexmo')({
+    identities: myGetIdentity,
+    ...
+});
+
 ```
 
 ## The Message Template
@@ -126,8 +132,8 @@ Templates should expect to run on a Message Object as defined by the [Layer Webh
 
 In addition, the following properties will be added:
 
-* `sender` Object: This will be the object you provide via a `getUser` call on the sender of this Message.
-* `recipient` Object: This will be the object you provide via a `getUser` call on a single recipient
+* `sender` Object: This will be the object you provide via a `identities` call on the sender of this Message.
+* `recipient` Object: This will be the object you provide via a `identities` call on a single recipient
 * `text` String: This will extract any text/plain parts and concatenate their body's together into an easily accessed string
 
 A custom template might look like:
@@ -159,10 +165,10 @@ The following parameters are supported:
 | nexmo.secret          | Yes       | Your nexmo API Secret |
 | nexmo.phoneNumbers    | Yes       | Array of phone numbers (strings) that you have purchased through Nexmo and will use to SMS your users |
 | delay                 | Yes       | How long to wait before checking for unread messages and notifiying users.  Delays can be configured using a number representing miliseconds, or a string such as '10 minutes' or other strings parsable by [ms](https://github.com/rauchg/ms.js) |
-| getUser               | No       | Function that looks up a user's info and returns the results via callback |
+| identities               | No       | Function that looks up a user's info and returns the results via callback |
 | template              | No        | Template string for formatting the SMS message |
 | name                  | No        | Name to assign the webhook. |
-| recipient_status_filter | No      | Array of user states that justify notification; `['sent']` (Message could not be delivered yet); `['sent', 'delivered']` (Message is undelivered OR simply unread); `['delivered']` (Message is delivered but not read). Default is `['sent', 'delivered']` |
+| reportOnStatus | No      | Array of user states that justify notification; `['sent']` (Message could not be delivered yet); `['sent', 'delivered']` (Message is undelivered OR simply unread); `['delivered']` (Message is delivered but not read). Default is `['sent', 'delivered']` |
 | numberExpirationTime  | No        | How long to wait before inactivity causes the link between a Conversation and nexmo number for a given user to expire.  Default is 1 week. Delays can be configured using a number representing miliseconds, or a string such as '10 minutes' or other strings parsable by [ms](https://github.com/rauchg/ms.js) |
 | introduceConversation | No        | Asynchronous callback for introducing a Conversation before showing Messages from that Conversation. |
 
