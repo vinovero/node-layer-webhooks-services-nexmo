@@ -1,13 +1,6 @@
 # Examples
 
-You can run this standalone server with your app, doing all the configuration needed right here.
-
-Before running, you'll need to open `server.js` and replace
-```javascript
-var getUser = require('./my-custom-get-user');
-```
-with a suitable `getUser` function described in the [README](../README.md).
-
+You can run this example as a standalone server with some configuration.
 
 ## Running in Heroku
 
