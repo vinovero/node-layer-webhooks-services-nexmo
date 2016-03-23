@@ -23,6 +23,7 @@ module.exports = function(options) {
   var EXPIRATION_TIME = ms(options.numberExpirationTime || DEFAULT_EXPIRATION);
   if (!options.delay) options.delay = '1 hour';
   if (!options.server.layerPath) options.server.layerPath = DEFAULT_PATH;
+  var logger;
 
   // Define the receipts webhook structure
   var hook = registerHooks();
@@ -229,7 +230,7 @@ module.exports = function(options) {
       }
     };
 
-    var logger = debug('layer-webhooks-nexmo:' + hook.name.replace(/\s/g,'-') + ':sms-notifier');
+    logger = debug('layer-webhooks-nexmo:' + hook.name.replace(/\s/g,'-') + ':sms-notifier');
 
     // Register the webhook with Layer's Services
     options.layer.webhookServices.register({
