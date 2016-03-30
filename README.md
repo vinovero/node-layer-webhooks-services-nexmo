@@ -19,48 +19,6 @@ If all available nexmo phone numbers have been used by a given user, then additi
 
 The quantity of nexmo phone numbers needed for a specific user is the number of Conversations you expect that user to be engaged in within a given week.  This number will presumably vary among your users, but if you set your quantity of numbers to 2 standard deviations above the average number of Conversations, the number of missed notifications should be pretty small.
 
-## How it works
-
-A User Record contains a mapping between Layer Conversation IDs and Nexmo Phone Numbers:
-```json
-{
-    "conversationId1": {
-        "phone": "phone1",
-        "expires": "d1"
-    },
-    "conversationId2": {
-        "phone": "phone2",
-        "expires": "d2"
-    },
-    "conversationId3": {
-        "phone": "phone3",
-        "expires": "d3"
-    }
-}
-```
-Receiving Layer Messages:
-
-1. The layer-webhooks-services `receipts` service notifies us whenever a Message has gone unread and requires notification of UserA.
-2. We read in a UserA's Record as shown above.
-3. We remove any expired links between Nexmo Phone Numbers and Conversations from UserA's Record, UNLESS they match our current Conversation
-4. If our current Conversation is in the user record
-4a. Use the phone number to text the user
-4b. Update the `expires` field to be one week after now.
-5. If our current Conversation is NOT in the user record
-5a. Find an unused phone number to text from
-5b. If all phone numbers are in use, log an error and move on.
-5c. If a phone number is available, add an entry to the User Record.
-6. If any changes were made, write the user Record back to redis
-7. Write a reverse lookup to redis so that for that user's phone number, we can lookup that user's userId.
-
-Receiving SMS Messages
-
-1. Nexmo's webhook notifies us of Who the SMS is from, what Nexmo Number its sent to, and the text of the Message
-2. Use the reverse lookup to get the UserID from the phone number that it was sent from
-3. Use that UserID's User Record to find the Conversation ID associated with the Nexmo Number it was sent to
-4. Post a Message from that UserID, to that Conversation ID with the specified text.
-5. Update the `expires` field to be one week after now.
-
 ## Setting up Identity Services
 
 Layer's Webhooks do not provide the recipient's phone number, only their userId.  In order to send them an SMS, we will need to get their phone number.  The default behavior is to automatically get the number from the Layer's Identities service; however, this only works if you've actually registered your user's phone number there.
@@ -132,8 +90,8 @@ Templates should expect to run on a Message Object as defined by the [Layer Webh
 
 In addition, the following properties will be added:
 
-* `sender` Object: This will be the object you provide via a `identities` call on the sender of this Message.
-* `recipient` Object: This will be the object you provide via a `identities` call on a single recipient
+* `sender` Object: This will be the object you provide via an `identities` call on the sender of this Message.
+* `recipient` Object: This will be the object you provide via an `identities` call on a single recipient
 * `text` String: This will extract any text/plain parts and concatenate their body's together into an easily accessed string
 
 A custom template might look like:
@@ -195,7 +153,7 @@ require('layer-webhooks-services-nexmo')({
 
 Result:
 * The first Unread Message that gets sent will start with "User A says:"
-* Each Message will just be the text of the Message and not need to identify the user's name over and over.
+* Each Message will just be the text of the Message and will not identify the user's name over and over.
 * If the Nexmo number changes to report on the Conversation with User B, it will happen with an SMS saying "User B says:".
 
 #### Your Conversations have Titles/Topics
@@ -274,3 +232,48 @@ secureExpressApp.listen(PORT, function() {
     });
 });
 ```
+
+
+## How it works
+
+This section is for those who want to understand what goes on under the hood.
+
+A User Record contains a mapping between Layer Conversation IDs and Nexmo Phone Numbers:
+```json
+{
+    "conversationId1": {
+        "phone": "phone1",
+        "expires": "d1"
+    },
+    "conversationId2": {
+        "phone": "phone2",
+        "expires": "d2"
+    },
+    "conversationId3": {
+        "phone": "phone3",
+        "expires": "d3"
+    }
+}
+```
+Receiving Layer Messages:
+
+1. The layer-webhooks-services `receipts` service notifies us whenever a Message has gone unread and requires notification of UserA.
+2. We read in UserA's Record as shown above.
+3. We remove any expired links between Nexmo Phone Numbers and Conversations from UserA's Record, UNLESS they match our current Conversation
+4. If our current Conversation is in the user record
+4a. Use the phone number to text the user
+4b. Update the `expires` field to be one week after now.
+5. If our current Conversation is NOT in the user record
+5a. Find an unused phone number to text from
+5b. If all phone numbers are in use, log an error and move on.
+5c. If a phone number is available, add an entry to the User Record.
+6. If any changes were made, write the user Record back to redis
+7. Write a reverse lookup to redis so that for that user's phone number, we can lookup that user's userId.
+
+Receiving SMS Messages
+
+1. Nexmo's webhook notifies us of Who the SMS is from, what Nexmo Number its sent to, and the text of the Message
+2. Use the reverse lookup to get the UserID from the phone number that it was sent from
+3. Use that UserID's User Record to find the Conversation ID associated with the Nexmo Number it was sent to
+4. Post a Message from that UserID, to that Conversation ID with the specified text.
+5. Update the `expires` field to be one week after now.
