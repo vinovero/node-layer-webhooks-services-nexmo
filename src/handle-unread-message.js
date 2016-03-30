@@ -39,16 +39,25 @@ module.exports = function(options) {
     );
   });
 
+  /**
+   * We expect a User Object with name and phone,
+   * but the Identity Server uses display_name and
+   * phone_number.  Translate object to meet expecations
+   *
+   * @method
+   * @param  {Object} identity - Identity Server User representation
+   * @return {Object}          - Expected User representation
+   */
   function simplifyIdentity(identity) {
     if (typeof options.identities !== 'function') {
       return {
-      	displayName: identity.display_name,
-      	avatarUrl: identity.avatar_url,
-      	firstName: identity.first_name,
-      	lastName: identity.last_name,
-      	email: identity.email_address,
-      	phone: identity.phone_number,
-      	metadata: identity.metadata
+        name: identity.display_name,
+        avatarUrl: identity.avatar_url,
+        firstName: identity.first_name,
+        lastName: identity.last_name,
+        email: identity.email_address,
+        phone: identity.phone_number,
+        metadata: identity.metadata
       };
     } else {
       return identity;
@@ -66,7 +75,7 @@ module.exports = function(options) {
       var user = simplifyIdentity(identities[recipient] || {});
       if (user.phone) {
         // Cache this so we can handle replies
-	      redis.set(REDIS_PHONE_PREFIX + user.phone, recipient);
+        redis.set(REDIS_PHONE_PREFIX + user.phone, recipient);
 
         // Continue to work on sending the SMS
         getPhoneNumberToSendFrom(recipient, message.conversation.id, function(err, fromNumber, isFirst) {
@@ -85,7 +94,7 @@ module.exports = function(options) {
 
     // If we don't have a number to send from, give up.
     if (!fromNumber) {
-    	logger('Out of available phone numbers; skipping unread message notification for user ' + userId,
+      logger('Out of available phone numbers; skipping unread message notification for user ' + userId,
       ' on Conversation ' + message.conversation.id);
       return done();
     }
@@ -99,11 +108,11 @@ module.exports = function(options) {
 
     // If this is a new link between Conversation and fromNumber, introduce the Conversation.
     if (isFirst && options.introduceConversation) {
-	    options.introduceConversation(message, function(err, introText) {
-  	    if (err) return done(err);
+      options.introduceConversation(message, function(err, introText) {
+        if (err) return done(err);
         logMessage(fromNumber, user.phone, message.id, true);
         sendSMS(message, introText, fromNumber, user.phone, done);
-    	});
+      });
     } else {
       logMessage(fromNumber, user.phone, message.id, false);
       sendSMS(message, '', fromNumber, user.phone, done);
@@ -226,7 +235,7 @@ module.exports = function(options) {
         // is of interest once the delay has completed.
         // Change to 'sent' to ONLY send notifications when a message wasn't delivered.
         reportForStatus: options.recipient_status_filter || ['sent', 'delivered'],
-	      identities: 'identities' in options ? options.identities : true
+        identities: 'identities' in options ? options.identities : true
       }
     };
 

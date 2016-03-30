@@ -72,13 +72,13 @@ module.exports = function(options) {
   function getUserConfig(userId) {
     return new Promise(function (resolve, reject) {
       redis.get(REDIS_USER_PREFIX + userId, function(err, userConfigStr) {
-	      if (err) {
+        if (err) {
           console.error(new Date().toLocaleString() + ': ' + webhookName + ': Unable to find user config for ' + userId, err);
           reject(err);
-	      } else if (!userConfigStr) {
+        } else if (!userConfigStr) {
           console.error(new Date().toLocaleString() + ': ' + webhookName + ': Unable to find user config for ' + userId);
           reject(null);
-	      } else {
+        } else {
           try {
             var userConfig = JSON.parse(userConfigStr);
             resolve({
@@ -89,7 +89,7 @@ module.exports = function(options) {
             console.error(new Date().toLocaleString() + ': ' + webhookName + ': Unable to parse user config for ' + userId, err);
             reject(err);
           }
-	      }
+        }
       });
     });
   }
@@ -167,12 +167,12 @@ module.exports = function(options) {
       // Ignore any phone numbers in their account that aren't for use with this service.
       if (options.nexmo.phoneNumbers.indexOf(number.msisdn) === -1) return;
       if (number.moHttpUrl !== url) {
-      	request({
-      	  method: 'POST',
-      	  url: 'https://rest.nexmo.com/number/update/' + options.nexmo.key + '/' + options.nexmo.secret + '/' + number.country + '/' + number.msisdn + '?moHttpUrl=' + urlencode(url)
-      	}, function(err, res) {
-      	  logger('Registering ' + number.msisdn, !err ? ' complete' : err);
-      	});
+        request({
+          method: 'POST',
+          url: 'https://rest.nexmo.com/number/update/' + options.nexmo.key + '/' + options.nexmo.secret + '/' + number.country + '/' + number.msisdn + '?moHttpUrl=' + urlencode(url)
+        }, function(err, res) {
+          logger('Registering ' + number.msisdn, !err ? ' complete' : err);
+        });
       }
     });
   });
